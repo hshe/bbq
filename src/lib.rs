@@ -235,7 +235,6 @@ pub fn get_size(dir: &str) -> std::io::Result<u64> {
 /// let removed_files = remove_old_files("/path/to/directory", 10000);
 /// ```
 pub fn remove_old_files(dir: &str, keep: u64) -> std::io::Result<Vec<String>> {
-    //判断当前目录，是否达到keep大小，如果达到，删除最旧的文件，直到小于keep
     let mut dir_size = get_size(dir).unwrap();
     if dir_size < keep {
         return Ok(vec![]);
@@ -249,7 +248,7 @@ pub fn remove_old_files(dir: &str, keep: u64) -> std::io::Result<Vec<String>> {
         std::fs::metadata(path)
             .ok()
             .and_then(|metadata| metadata.modified().ok())
-            .unwrap_or_else(|| std::time::SystemTime::UNIX_EPOCH)
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
     });
     let mut removed_files = Vec::new();
     while dir_size > keep {
@@ -298,7 +297,7 @@ mod tests_remove_old_files {
     #[test]
     fn test_remove_old_files() {
         let dir = "/Users/mojih/Downloads/test";
-        let keep = 1024 * 1024 * 1;
+        let keep = 1024 * 1024;
         let removed_files = remove_old_files(dir, keep).unwrap();
         println!("Removed files: {:?}", removed_files);
     }
