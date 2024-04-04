@@ -13,3 +13,5 @@ categories = ["filesystem"]
 [dependencies]
 
 [lib]
+name = "bbq"
+path = "src/lib.rs"

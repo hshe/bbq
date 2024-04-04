@@ -14,32 +14,6 @@ pub struct FileInfo {
     pub size_mb: u64,
 }
 
-/// The `get_size` function returns the total size (in bytes) of the specified directory.
-///
-/// # Arguments
-///
-/// * `dir` - A string slice that contains the path of the directory to query.
-///
-/// # Return
-///
-/// Returns a `std::io::Result<u64>`. If the operation is successful, it will contain the total size of the directory (in bytes).
-pub fn get_size(dir: &str) -> std::io::Result<u64> {
-    let mut total_size = 0;
-    for entry in fs::read_dir(Path::new(dir))? {
-        let entry = entry?;
-        let metadata = fs::metadata(entry.path())?;
-
-        total_size += if metadata.is_file() {
-            metadata.len()
-        } else if metadata.is_dir() {
-            get_size(&entry.path().to_string_lossy())?
-        } else {
-            0
-        };
-    }
-    Ok(total_size)
-}
-
 /// Compresses the specified directory into a tar.gz file.
 ///
 /// # Arguments
@@ -218,6 +192,80 @@ pub fn get_dir_info(dir: &str) -> std::io::Result<Vec<FileInfo>> {
     Ok(files_info)
 }
 
+/// The `get_size` function returns the total size (in bytes) of the specified directory.
+///
+/// # Arguments
+///
+/// * `dir` - A string slice that contains the path of the directory to query.
+///
+/// # Return
+///
+/// Returns a `std::io::Result<u64>`. If the operation is successful, it will contain the total size of the directory (in bytes).
+pub fn get_size(dir: &str) -> std::io::Result<u64> {
+    let mut total_size = 0;
+    for entry in fs::read_dir(Path::new(dir))? {
+        let entry = entry?;
+        let metadata = fs::metadata(entry.path())?;
+
+        total_size += if metadata.is_file() {
+            metadata.len()
+        } else if metadata.is_dir() {
+            get_size(&entry.path().to_string_lossy())?
+        } else {
+            0
+        };
+    }
+    Ok(total_size)
+}
+
+/// Removes old files from a directory until the total size of the directory is less than a specified size.
+///
+/// # Arguments
+///
+/// * `dir` - A string slice that holds the name of the directory.
+/// * `keep` - The maximum size (in bytes) that the directory should be. If the directory is larger than this, the oldest files will be removed until it is less than this size.
+///
+/// # Returns
+///
+/// * `std::io::Result<Vec<String>>` - A Result containing a vector of the names of the files that were removed. If an error occurred, it will contain the error.
+///
+/// # Example
+///
+/// ```
+/// let removed_files = remove_old_files("/path/to/directory", 10000);
+/// ```
+pub fn remove_old_files(dir: &str, keep: u64) -> std::io::Result<Vec<String>> {
+    //判断当前目录，是否达到keep大小，如果达到，删除最旧的文件，直到小于keep
+    let mut dir_size = get_size(dir).unwrap();
+    if dir_size < keep {
+        return Ok(vec![]);
+    }
+    let mut files = std::fs::read_dir(dir)?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| path.is_file())
+        .collect::<Vec<_>>();
+    files.sort_by_key(|path| {
+        std::fs::metadata(path)
+            .ok()
+            .and_then(|metadata| metadata.modified().ok())
+            .unwrap_or_else(|| std::time::SystemTime::UNIX_EPOCH)
+    });
+    let mut removed_files = Vec::new();
+    while dir_size > keep {
+        if let Some(file) = files.pop() {
+            let metadata = std::fs::metadata(&file)?;
+            let size = metadata.len();
+            dir_size -= size;
+            removed_files.push(file.to_str().unwrap().to_string());
+            std::fs::remove_file(file)?;
+        } else {
+            break;
+        }
+    }
+    Ok(removed_files)
+}
+
 #[cfg(test)]
 mod tests_dir_info {
     use super::*;
@@ -240,5 +288,18 @@ mod tests_dir_info {
         for file_info in files_info {
             println!("{:?}\n", file_info);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_remove_old_files {
+    use super::*;
+
+    #[test]
+    fn test_remove_old_files() {
+        let dir = "/Users/mojih/Downloads/test";
+        let keep = 1024 * 1024 * 1;
+        let removed_files = remove_old_files(dir, keep).unwrap();
+        println!("Removed files: {:?}", removed_files);
     }
 }
