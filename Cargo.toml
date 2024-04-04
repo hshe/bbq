@@ -1,9 +1,9 @@
 [package]
 name = "bbq"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "This project is for file handling. It can add, delete, modify, and query."
-author = "hshe <hshe@163.com>"
+# author = "hshe <hshe@163.com>"
 readme = "README.md"
 repository = "https://github.com/hshe/bbq"
 license = "MIT"
