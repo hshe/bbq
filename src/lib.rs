@@ -158,35 +158,36 @@ pub fn move_file(src: &str, dest: &str) -> std::io::Result<()> {
 
 pub fn get_dir_info(dir: &str) -> std::io::Result<Vec<FileInfo>> {
     let mut files_info = Vec::new();
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries {
+            let entry = entry?;
+            let path = entry.path();
+            let metadata = fs::metadata(&path)?;
+            let file_name = path.file_name().unwrap().to_str().unwrap().to_string();
+            let file_type = if metadata.is_file() {
+                "File".to_string()
+            } else if metadata.is_dir() {
+                "Directory".to_string()
+            } else {
+                "Unknown".to_string()
+            };
+            let size = metadata.len();
+            let size_kb = size / 1024;
+            let size_mb = size_kb / 1024;
+            let created_time = metadata.created()?;
+            let modified_time = metadata.modified()?;
 
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        let metadata = fs::metadata(&path)?;
-        let file_name = path.file_name().unwrap().to_str().unwrap().to_string();
-        let file_type = if metadata.is_file() {
-            "File".to_string()
-        } else if metadata.is_dir() {
-            "Directory".to_string()
-        } else {
-            "Unknown".to_string()
-        };
-        let size = metadata.len();
-        let size_kb = size / 1024;
-        let size_mb = size_kb / 1024;
-        let created_time = metadata.created()?;
-        let modified_time = metadata.modified()?;
-
-        files_info.push(FileInfo {
-            file_name,
-            file_type,
-            file_path: path.to_str().unwrap().to_string(),
-            created_time,
-            modified_time,
-            size,
-            size_kb,
-            size_mb,
-        });
+            files_info.push(FileInfo {
+                file_name,
+                file_type,
+                file_path: path.to_str().unwrap().to_string(),
+                created_time,
+                modified_time,
+                size,
+                size_kb,
+                size_mb,
+            });
+        }
     }
 
     Ok(files_info)
@@ -202,20 +203,29 @@ pub fn get_dir_info(dir: &str) -> std::io::Result<Vec<FileInfo>> {
 ///
 /// Returns a `std::io::Result<u64>`. If the operation is successful, it will contain the total size of the directory (in bytes).
 pub fn get_size(dir: &str) -> std::io::Result<u64> {
-    let mut total_size = 0;
-    for entry in fs::read_dir(Path::new(dir))? {
-        let entry = entry?;
-        let metadata = fs::metadata(entry.path())?;
+    let path = Path::new(dir);
+    return get_size_by_path(path);
+}
 
-        total_size += if metadata.is_file() {
-            metadata.len()
-        } else if metadata.is_dir() {
-            get_size(&entry.path().to_string_lossy())?
-        } else {
-            0
-        };
+
+fn get_size_by_path(path: &Path) -> std::io::Result<u64>{
+    let metadata = fs::metadata(path)?;
+    if metadata.is_file() {
+        Ok(metadata.len())
+    } else if metadata.is_dir() {
+        let mut total_size = 0;
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_symlink() {
+                continue;
+            }
+            total_size += get_size_by_path(&entry.path())?;
+        }
+        Ok(total_size)
+    } else {
+        Ok(0)
     }
-    Ok(total_size)
 }
 
 /// Removes old files from a directory until the total size of the directory is less than a specified size.
@@ -239,13 +249,16 @@ pub fn remove_old_files(dir: &str, keep: u64) -> std::io::Result<Vec<String>> {
     if dir_size < keep {
         return Ok(vec![]);
     }
-    let mut files = std::fs::read_dir(dir)?
-        .filter_map(|entry| entry.ok())
-        .map(|entry| entry.path())
-        .filter(|path| path.is_file())
-        .collect::<Vec<_>>();
+    let path = Path::new(dir);
+    let mut files = get_files(path)?;
+    files.retain(|path| {
+        fs::metadata(path)
+            .ok()
+            .map(|metadata| !metadata.file_type().is_symlink())
+            .unwrap_or(false)
+    });
     files.sort_by_key(|path| {
-        std::fs::metadata(path)
+        fs::metadata(path)
             .ok()
             .and_then(|metadata| metadata.modified().ok())
             .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
@@ -253,16 +266,37 @@ pub fn remove_old_files(dir: &str, keep: u64) -> std::io::Result<Vec<String>> {
     let mut removed_files = Vec::new();
     while dir_size > keep {
         if let Some(file) = files.pop() {
-            let metadata = std::fs::metadata(&file)?;
+            let metadata = fs::metadata(&file)?;
             let size = metadata.len();
             dir_size -= size;
             removed_files.push(file.to_str().unwrap().to_string());
-            std::fs::remove_file(file)?;
+            fs::remove_file(file.clone());
+            
         } else {
             break;
         }
     }
     Ok(removed_files)
+}
+
+fn get_files(dir: &Path) -> std::io::Result<Vec<std::path::PathBuf>> {
+    let mut files = Vec::new();
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries {
+            if let Ok(entry) = entry {
+                let path = entry.path();
+                if path.is_file() {
+                    files.push(path);
+                } else if path.is_dir() {
+                    match get_files(&path) {
+                        Ok(mut sub_files) => files.extend(sub_files),
+                        Err(_) => continue, // Ignore directories that cannot be accessed
+                    }
+                }
+            }
+        }
+    }
+    Ok(files)
 }
 
 #[cfg(test)]
@@ -297,8 +331,27 @@ mod tests_remove_old_files {
     #[test]
     fn test_remove_old_files() {
         let dir = "/Users/mojih/Downloads/test";
-        let keep = 1024 * 1024;
+        let keep = 1024 * 1024 * 116;
         let removed_files = remove_old_files(dir, keep).unwrap();
         println!("Removed files: {:?}", removed_files);
+    }
+
+    #[test]
+    fn test_get_files() {
+        let dir = "/Users/mojih/Downloads/test";
+        // for entry in fs::read_dir(dir).unwrap() {
+        //     let entry = entry.unwrap();
+        //     let path = entry.path();
+        //     println!("path: {:?}", path);
+        // }
+        let size = get_size(dir);
+        if size.is_err() {
+            println!("1111Error: {:?}", dir);
+        }else {
+            let size = size.unwrap();
+            println!("size: {:?}", size);
+            // mb
+            println!("size: {:?}", size / 1024 / 1024);
+        }
     }
 }
