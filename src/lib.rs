@@ -207,8 +207,7 @@ pub fn get_size(dir: &str) -> std::io::Result<u64> {
     return get_size_by_path(path);
 }
 
-
-fn get_size_by_path(path: &Path) -> std::io::Result<u64>{
+fn get_size_by_path(path: &Path) -> std::io::Result<u64> {
     let metadata = fs::metadata(path)?;
     if metadata.is_file() {
         Ok(metadata.len())
@@ -266,12 +265,14 @@ pub fn remove_old_files(dir: &str, keep: u64) -> std::io::Result<Vec<String>> {
     let mut removed_files = Vec::new();
     while dir_size > keep {
         if let Some(file) = files.pop() {
+            if file.is_symlink() {
+                continue;
+            }
             let metadata = fs::metadata(&file)?;
             let size = metadata.len();
             dir_size -= size;
             removed_files.push(file.to_str().unwrap().to_string());
-            fs::remove_file(file.clone());
-            
+            let _ = fs::remove_file(file.clone());
         } else {
             break;
         }
@@ -286,10 +287,13 @@ fn get_files(dir: &Path) -> std::io::Result<Vec<std::path::PathBuf>> {
             if let Ok(entry) = entry {
                 let path = entry.path();
                 if path.is_file() {
+                    if path.is_symlink() {
+                        continue;
+                    }
                     files.push(path);
                 } else if path.is_dir() {
                     match get_files(&path) {
-                        Ok(mut sub_files) => files.extend(sub_files),
+                        Ok(sub_files) => files.extend(sub_files),
                         Err(_) => continue, // Ignore directories that cannot be accessed
                     }
                 }
@@ -331,7 +335,7 @@ mod tests_remove_old_files {
     #[test]
     fn test_remove_old_files() {
         let dir = "/Users/mojih/Downloads/test";
-        let keep = 1024 * 1024 * 116;
+        let keep = 1024 * 1024 * 80;
         let removed_files = remove_old_files(dir, keep).unwrap();
         println!("Removed files: {:?}", removed_files);
     }
@@ -339,19 +343,25 @@ mod tests_remove_old_files {
     #[test]
     fn test_get_files() {
         let dir = "/Users/mojih/Downloads/test";
-        // for entry in fs::read_dir(dir).unwrap() {
-        //     let entry = entry.unwrap();
-        //     let path = entry.path();
-        //     println!("path: {:?}", path);
-        // }
-        let size = get_size(dir);
+        for entry in fs::read_dir(dir).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            println!("path: {:?}", path);
+        }
+    }
+
+    #[test]
+    fn test_get_size_by_path() {
+        let path = "/Users/mojih/Downloads/test";
+        let size = get_size(path);
         if size.is_err() {
-            println!("1111Error: {:?}", dir);
-        }else {
+            println!("1111Error: {:?}", size);
+        } else {
             let size = size.unwrap();
             println!("size: {:?}", size);
             // mb
             println!("size: {:?}", size / 1024 / 1024);
         }
     }
+
 }
