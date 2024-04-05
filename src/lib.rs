@@ -302,27 +302,6 @@ pub fn remove_files(files: Vec<String>) -> std::io::Result<()> {
     }
     Ok(())
 }
-/// Reads a file and returns its content as a binary.
-///
-/// # Arguments
-///
-/// * `file` - A string that holds the name of the file to be read.
-///
-/// # Returns
-///
-/// * `std::io::Result<Vec<u8>>` - A Result containing the binary content of the file or an error.
-///
-/// # Example
-///
-/// ```
-/// let file_content = read_file("/path/to/file");
-/// ```
-pub fn read_file(file: &str) -> std::io::Result<Vec<u8>> {
-    let mut file = File::open(file)?;
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer)?;
-    Ok(buffer)
-}
 
 /// Reads multiple files and returns their content as binaries.
 ///
