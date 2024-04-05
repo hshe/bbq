@@ -11,7 +11,7 @@ keywords = ["file", "log", "systemlog"]
 categories = ["filesystem"]
 
 [dependencies]
-
+serde = "1"
 [lib]
 name = "bbq"
 path = "src/lib.rs"
