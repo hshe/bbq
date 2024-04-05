@@ -11,8 +11,6 @@ pub struct FileInfo {
     pub created_time: SystemTime,
     pub modified_time: SystemTime,
     pub size: u64,
-    pub size_kb: u64,
-    pub size_mb: u64,
 }
 
 /// Compresses the specified directory into a tar.gz file.
@@ -173,8 +171,6 @@ pub fn get_dir_info(dir: &str) -> std::io::Result<Vec<FileInfo>> {
                 "Unknown".to_string()
             };
             let size = metadata.len();
-            let size_kb = size / 1024;
-            let size_mb = size_kb / 1024;
             let created_time = metadata.created()?;
             let modified_time = metadata.modified()?;
 
@@ -185,8 +181,6 @@ pub fn get_dir_info(dir: &str) -> std::io::Result<Vec<FileInfo>> {
                 created_time,
                 modified_time,
                 size,
-                size_kb,
-                size_mb,
             });
         }
     }
@@ -382,8 +376,6 @@ pub fn get_files_info_by_dir(dir: &str) -> std::io::Result<Vec<FileInfo>> {
                 "Unknown".to_string()
             };
             let size = metadata.len();
-            let size_kb = size / 1024;
-            let size_mb = size_kb / 1024;
             let created_time = metadata.created()?;
             let modified_time = metadata.modified()?;
 
@@ -394,8 +386,6 @@ pub fn get_files_info_by_dir(dir: &str) -> std::io::Result<Vec<FileInfo>> {
                 created_time,
                 modified_time,
                 size,
-                size_kb,
-                size_mb,
             });
         }
     }
