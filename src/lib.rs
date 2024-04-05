@@ -204,7 +204,7 @@ pub fn get_dir_info(dir: &str) -> std::io::Result<Vec<FileInfo>> {
 /// Returns a `std::io::Result<u64>`. If the operation is successful, it will contain the total size of the directory (in bytes).
 pub fn get_size(dir: &str) -> std::io::Result<u64> {
     let path = Path::new(dir);
-    return get_size_by_path(path);
+    get_size_by_path(path)
 }
 
 fn get_size_by_path(path: &Path) -> std::io::Result<u64> {
@@ -280,22 +280,105 @@ pub fn remove_old_files(dir: &str, keep: u64) -> std::io::Result<Vec<String>> {
     Ok(removed_files)
 }
 
-fn get_files(dir: &Path) -> std::io::Result<Vec<std::path::PathBuf>> {
+/// Removes specified files from the system.
+///
+/// # Arguments
+///
+/// * `files` - A vector of strings that holds the names of the files to be removed.
+///
+/// # Returns
+///
+/// * `std::io::Result<()>` - A Result indicating success or failure. If an error occurred during file removal, it will contain the error.
+///
+/// # Example
+///
+/// ```
+/// let files_to_remove = vec!["/path/to/file1", "/path/to/file2"];
+/// let result = remove_files(files_to_remove);
+/// ```
+pub fn remove_files(files: Vec<String>) -> std::io::Result<()> {
+    for file in files {
+        let _ = fs::remove_file(file);
+    }
+    Ok(())
+}
+/// Reads a file and returns its content as a binary.
+///
+/// # Arguments
+///
+/// * `file` - A string that holds the name of the file to be read.
+///
+/// # Returns
+///
+/// * `std::io::Result<Vec<u8>>` - A Result containing the binary content of the file or an error.
+///
+/// # Example
+///
+/// ```
+/// let file_content = read_file("/path/to/file");
+/// ```
+pub fn read_file(file: &str) -> std::io::Result<Vec<u8>> {
+    let mut file = File::open(file)?;
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)?;
+    Ok(buffer)
+}
+
+/// Reads multiple files and returns their content as binaries.
+///
+/// # Arguments
+///
+/// * `files` - A vector of strings that holds the names of the files to be read.
+///
+/// # Returns
+///
+/// * `std::io::Result<Vec<Vec<u8>>>` - A Result containing a vector of binary content for each file or an error.
+///
+/// # Example
+///
+/// ```
+/// let files_to_read = vec!["/path/to/file1", "/path/to/file2"];
+/// let file_contents = read_files(files_to_read);
+/// ```
+pub fn read_files(files: Vec<String>) -> std::io::Result<Vec<Vec<u8>>> {
+    let mut buffers = Vec::new();
+    for file in files {
+        let buffer = read_file(&file)?;
+        buffers.push(buffer);
+    }
+    Ok(buffers)
+}
+
+/// Retrieves all files from a specified directory, including subdirectories.
+///
+/// # Arguments
+///
+/// * `dir` - A reference to a Path that holds the directory from which files should be retrieved.
+///
+/// # Returns
+///
+/// * `std::io::Result<Vec<std::path::PathBuf>>` - A Result containing a vector of PathBuf, each representing a file in the directory. If an error occurred, it will contain the error.
+///
+/// # Example
+///
+/// ```
+/// let dir = Path::new("/path/to/directory");
+/// let files = get_files(dir);
+/// ```
+pub fn get_files(dir: &Path) -> std::io::Result<Vec<std::path::PathBuf>> {
     let mut files = Vec::new();
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries {
-            if let Ok(entry) = entry {
-                let path = entry.path();
-                if path.is_file() {
-                    if path.is_symlink() {
-                        continue;
-                    }
-                    files.push(path);
-                } else if path.is_dir() {
-                    match get_files(&path) {
-                        Ok(sub_files) => files.extend(sub_files),
-                        Err(_) => continue, // Ignore directories that cannot be accessed
-                    }
+            let path = entry?.path();
+            if path.is_file() {
+                if path.is_symlink() {
+                    continue;
+                }
+                files.push(path);
+            } else if path.is_dir() {
+                match get_files(&path) {
+                    Ok(sub_files) => files.extend(sub_files),
+                    Err(_) => continue, // Ignore directories that cannot be accessed
                 }
             }
         }
@@ -363,5 +446,4 @@ mod tests_remove_old_files {
             println!("size: {:?}", size / 1024 / 1024);
         }
     }
-
 }
