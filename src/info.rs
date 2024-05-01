@@ -1,7 +1,7 @@
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 use std::time::SystemTime;
-use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileInfo {
